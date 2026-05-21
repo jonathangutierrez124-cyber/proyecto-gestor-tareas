@@ -1,28 +1,91 @@
 const express = require('express');
 const cors = require('cors');
+const db = require('./db/database');
 
-require('./db/database'); // initialize and seed DB on startup
-
-const proyectosRouter = require('./routes/proyectos');
-const tareasRouter    = require('./routes/tareas');
-const aportesRouter   = require('./routes/aportes');
-const historialRouter = require('./routes/historial');
-const metricasRouter  = require('./routes/metricas');
-
-const app  = express();
+const app = express();
 const PORT = process.env.PORT || 3001;
 
-app.use(cors({ origin: ['http://localhost:5173', 'http://localhost:4173'] }));
+app.use(cors());
 app.use(express.json());
 
-app.use('/api/proyectos', proyectosRouter);
-app.use('/api/tareas',    tareasRouter);
-app.use('/api/aportes',   aportesRouter);
-app.use('/api/historial', historialRouter);
-app.use('/api/metricas',  metricasRouter);
+// GET todas los proyectos
+app.get('/api/proyectos', (req, res) => {
+  db.all('SELECT * FROM proyectos', (err, rows) => {
+    if (err) {
+      res.status(500).json({ error: err.message });
+    } else {
+      res.json(rows);
+    }
+  });
+});
 
-app.get('/api/health', (_req, res) => res.json({ ok: true }));
+// GET tareas por proyecto
+app.get('/api/tareas/:proyecto_id', (req, res) => {
+  const { proyecto_id } = req.params;
+  db.all('SELECT * FROM tareas WHERE proyecto_id = ?', [proyecto_id], (err, rows) => {
+    if (err) {
+      res.status(500).json({ error: err.message });
+    } else {
+      res.json(rows);
+    }
+  });
+});
+
+// POST crear proyecto
+app.post('/api/proyectos', (req, res) => {
+  const { nombre, descripcion } = req.body;
+  db.run('INSERT INTO proyectos (nombre, descripcion) VALUES (?, ?)', 
+    [nombre, descripcion], 
+    function(err) {
+      if (err) {
+        res.status(500).json({ error: err.message });
+      } else {
+        res.json({ id: this.lastID, nombre, descripcion });
+      }
+    });
+});
+
+// POST crear tarea
+app.post('/api/tareas', (req, res) => {
+  const { proyecto_id, titulo, descripcion, estado } = req.body;
+  db.run('INSERT INTO tareas (proyecto_id, titulo, descripcion, estado) VALUES (?, ?, ?, ?)', 
+    [proyecto_id, titulo, descripcion, estado],
+    function(err) {
+      if (err) {
+        res.status(500).json({ error: err.message });
+      } else {
+        res.json({ id: this.lastID, proyecto_id, titulo, descripcion, estado });
+      }
+    });
+});
+
+// PUT actualizar tarea
+app.put('/api/tareas/:id', (req, res) => {
+  const { id } = req.params;
+  const { titulo, descripcion, estado } = req.body;
+  db.run('UPDATE tareas SET titulo = ?, descripcion = ?, estado = ? WHERE id = ?', 
+    [titulo, descripcion, estado, id],
+    function(err) {
+      if (err) {
+        res.status(500).json({ error: err.message });
+      } else {
+        res.json({ message: 'Tarea actualizada' });
+      }
+    });
+});
+
+// DELETE tarea
+app.delete('/api/tareas/:id', (req, res) => {
+  const { id } = req.params;
+  db.run('DELETE FROM tareas WHERE id = ?', [id], function(err) {
+    if (err) {
+      res.status(500).json({ error: err.message });
+    } else {
+      res.json({ message: 'Tarea eliminada' });
+    }
+  });
+});
 
 app.listen(PORT, () => {
-  console.log(`✅ Servidor corriendo en http://localhost:${PORT}`);
+  console.log(`Servidor corriendo en puerto ${PORT}`);
 });
