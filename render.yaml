@@ -1,9 +1,0 @@
-services:
-  - type: web
-    name: proyecto-gestor-server
-    runtime: node
-    startCommand: node server/server.js
-    buildCommand: cd server && npm install && cd ../client && npm install && cd ..
-    envVars:
-      - key: NODE_ENV
-        value: production
