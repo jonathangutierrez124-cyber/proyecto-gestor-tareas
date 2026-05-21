@@ -1,6 +1,6 @@
 const express = require('express');
 const cors = require('cors');
-const db = require('./db/database');
+const pool = require('./db/database');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -9,81 +9,72 @@ app.use(cors());
 app.use(express.json());
 
 // GET todas los proyectos
-app.get('/api/proyectos', (req, res) => {
-  db.all('SELECT * FROM proyectos', (err, rows) => {
-    if (err) {
-      res.status(500).json({ error: err.message });
-    } else {
-      res.json(rows);
-    }
-  });
+app.get('/api/proyectos', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM proyectos');
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // GET tareas por proyecto
-app.get('/api/tareas/:proyecto_id', (req, res) => {
-  const { proyecto_id } = req.params;
-  db.all('SELECT * FROM tareas WHERE proyecto_id = ?', [proyecto_id], (err, rows) => {
-    if (err) {
-      res.status(500).json({ error: err.message });
-    } else {
-      res.json(rows);
-    }
-  });
+app.get('/api/tareas/:proyecto_id', async (req, res) => {
+  try {
+    const { proyecto_id } = req.params;
+    const result = await pool.query('SELECT * FROM tareas WHERE proyecto_id = $1', [proyecto_id]);
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // POST crear proyecto
-app.post('/api/proyectos', (req, res) => {
-  const { nombre, descripcion } = req.body;
-  db.run('INSERT INTO proyectos (nombre, descripcion) VALUES (?, ?)', 
-    [nombre, descripcion], 
-    function(err) {
-      if (err) {
-        res.status(500).json({ error: err.message });
-      } else {
-        res.json({ id: this.lastID, nombre, descripcion });
-      }
-    });
+app.post('/api/proyectos', async (req, res) => {
+  try {
+    const { nombre, descripcion } = req.body;
+    const result = await pool.query('INSERT INTO proyectos (nombre, descripcion) VALUES ($1, $2) RETURNING *', 
+      [nombre, descripcion]);
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // POST crear tarea
-app.post('/api/tareas', (req, res) => {
-  const { proyecto_id, titulo, descripcion, estado } = req.body;
-  db.run('INSERT INTO tareas (proyecto_id, titulo, descripcion, estado) VALUES (?, ?, ?, ?)', 
-    [proyecto_id, titulo, descripcion, estado],
-    function(err) {
-      if (err) {
-        res.status(500).json({ error: err.message });
-      } else {
-        res.json({ id: this.lastID, proyecto_id, titulo, descripcion, estado });
-      }
-    });
+app.post('/api/tareas', async (req, res) => {
+  try {
+    const { proyecto_id, titulo, descripcion, estado } = req.body;
+    const result = await pool.query('INSERT INTO tareas (proyecto_id, titulo, descripcion, estado) VALUES ($1, $2, $3, $4) RETURNING *', 
+      [proyecto_id, titulo, descripcion, estado]);
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // PUT actualizar tarea
-app.put('/api/tareas/:id', (req, res) => {
-  const { id } = req.params;
-  const { titulo, descripcion, estado } = req.body;
-  db.run('UPDATE tareas SET titulo = ?, descripcion = ?, estado = ? WHERE id = ?', 
-    [titulo, descripcion, estado, id],
-    function(err) {
-      if (err) {
-        res.status(500).json({ error: err.message });
-      } else {
-        res.json({ message: 'Tarea actualizada' });
-      }
-    });
+app.put('/api/tareas/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { titulo, descripcion, estado } = req.body;
+    const result = await pool.query('UPDATE tareas SET titulo = $1, descripcion = $2, estado = $3 WHERE id = $4 RETURNING *', 
+      [titulo, descripcion, estado, id]);
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // DELETE tarea
-app.delete('/api/tareas/:id', (req, res) => {
-  const { id } = req.params;
-  db.run('DELETE FROM tareas WHERE id = ?', [id], function(err) {
-    if (err) {
-      res.status(500).json({ error: err.message });
-    } else {
-      res.json({ message: 'Tarea eliminada' });
-    }
-  });
+app.delete('/api/tareas/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    await pool.query('DELETE FROM tareas WHERE id = $1', [id]);
+    res.json({ message: 'Tarea eliminada' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.listen(PORT, () => {

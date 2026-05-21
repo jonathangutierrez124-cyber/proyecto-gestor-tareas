@@ -1,68 +1,65 @@
-const sqlite3 = require('sqlite3').verbose();
-const path = require('path');
+const { Pool } = require('pg');
 
-const dbPath = path.join(__dirname, 'gestor_tareas.sqlite');
-
-const db = new sqlite3.Database(dbPath, (err) => {
-  if (err) {
-    console.error('Error al conectar a la base de datos:', err);
-  } else {
-    console.log('Base de datos conectada');
-    initDatabase();
-  }
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/gestor_tareas'
 });
 
-function initDatabase() {
-  db.serialize(() => {
-    // Tabla de proyectos
-    db.run(`
+pool.on('error', (err) => {
+  console.error('Error en la conexión a la BD:', err);
+});
+
+async function initDatabase() {
+  try {
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS proyectos (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id SERIAL PRIMARY KEY,
         nombre TEXT NOT NULL,
         descripcion TEXT,
-        fecha_creacion DATETIME DEFAULT CURRENT_TIMESTAMP
+        fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
 
-    // Tabla de tareas
-    db.run(`
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS tareas (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        proyecto_id INTEGER NOT NULL,
+        id SERIAL PRIMARY KEY,
+        proyecto_id INTEGER NOT NULL REFERENCES proyectos(id) ON DELETE CASCADE,
         titulo TEXT NOT NULL,
         descripcion TEXT,
         estado TEXT DEFAULT 'pendiente',
-        fecha_creacion DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (proyecto_id) REFERENCES proyectos(id)
+        fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
-    `, () => {
-      seedDatabase();
-    });
-  });
+    `);
+
+    await seedDatabase();
+    console.log('Base de datos inicializada');
+  } catch (err) {
+    console.error('Error al inicializar BD:', err);
+  }
 }
 
-function seedDatabase() {
-  db.get("SELECT COUNT(*) as count FROM proyectos", (err, row) => {
-    if (err) {
-      console.error('Error al verificar proyectos:', err);
-      return;
+async function seedDatabase() {
+  try {
+    const count = await pool.query('SELECT COUNT(*) FROM proyectos');
+    
+    if (count.rows[0].count === 0) {
+      await pool.query("INSERT INTO proyectos (nombre, descripcion) VALUES ($1, $2)", 
+        ['Proyecto A', 'Descripción del Proyecto A']);
+      await pool.query("INSERT INTO proyectos (nombre, descripcion) VALUES ($1, $2)", 
+        ['Proyecto B', 'Descripción del Proyecto B']);
+      await pool.query("INSERT INTO tareas (proyecto_id, titulo, descripcion, estado) VALUES ($1, $2, $3, $4)", 
+        [1, 'Tarea 1', 'Descripción Tarea 1', 'pendiente']);
+      await pool.query("INSERT INTO tareas (proyecto_id, titulo, descripcion, estado) VALUES ($1, $2, $3, $4)", 
+        [1, 'Tarea 2', 'Descripción Tarea 2', 'completada']);
+      await pool.query("INSERT INTO tareas (proyecto_id, titulo, descripcion, estado) VALUES ($1, $2, $3, $4)", 
+        [2, 'Tarea 3', 'Descripción Tarea 3', 'pendiente']);
+      
+      console.log('Datos de prueba insertados');
     }
-
-    if (row.count === 0) {
-      db.serialize(() => {
-        db.run("INSERT INTO proyectos (nombre, descripcion) VALUES (?, ?)", 
-          ['Proyecto A', 'Descripción del Proyecto A']);
-        db.run("INSERT INTO proyectos (nombre, descripcion) VALUES (?, ?)", 
-          ['Proyecto B', 'Descripción del Proyecto B']);
-        db.run("INSERT INTO tareas (proyecto_id, titulo, descripcion, estado) VALUES (?, ?, ?, ?)", 
-          [1, 'Tarea 1', 'Descripción Tarea 1', 'pendiente']);
-        db.run("INSERT INTO tareas (proyecto_id, titulo, descripcion, estado) VALUES (?, ?, ?, ?)", 
-          [1, 'Tarea 2', 'Descripción Tarea 2', 'completada']);
-        db.run("INSERT INTO tareas (proyecto_id, titulo, descripcion, estado) VALUES (?, ?, ?, ?)", 
-          [2, 'Tarea 3', 'Descripción Tarea 3', 'pendiente']);
-      });
-    }
-  });
+  } catch (err) {
+    console.error('Error al hacer seed:', err);
+  }
 }
 
-module.exports = db;
+initDatabase();
+
+module.exports = pool;
